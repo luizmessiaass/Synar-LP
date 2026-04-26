@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Portal</title>
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      background: #000;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+
+    .scene,
+    .scene video,
+    #handoff-veil,
+    #bloom,
+    #flash {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      contain: paint;
+    }
+
+    .scene {
+      overflow: hidden;
+    }
+
+    .scene video {
+      object-fit: cover;
+      pointer-events: none;
+      transform-origin: center center;
+      transform: translateZ(0) scale(1);
+      opacity: 1;
+      filter: none;
+      will-change: transform, opacity, filter;
+      transition: transform 1.55s cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity 1.2s ease-out,
+                  filter 1.45s ease-out;
+    }
+
+    /* ── Scene stacking ── */
+
+    #scene-next {
+      z-index: 0;
+      display: grid;
+      place-items: center;
+      background: #0d0d0d;
+      color: #f0ebe3;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.01s linear;
+    }
+
+    #scene-next.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    #scene-portal {
+      z-index: 1;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 1.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #scene-portal.preparing {
+      opacity: 0;
+      visibility: visible;
+    }
+
+    #scene-portal.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    #scene-portal.blending video {
+      transform: translateZ(0) scale(1.035);
+      opacity: 0.96;
+      filter: blur(2.5px) brightness(0.84) saturate(0.92);
+    }
+
+    #scene-portal video.portal-exit {
+      transform: translateZ(0) scale(1.16);
+      opacity: 0.88;
+      filter: brightness(1.08) saturate(1.05);
+    }
+
+    #scene-ambient {
+      z-index: 2;
+      transition: opacity 1.55s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #scene-ambient.leaving {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #scene-ambient.leaving video {
+      transform: translateZ(0) scale(1.07);
+      filter: blur(7px) brightness(1.2) saturate(1.08);
+    }
+
+    #scene-ambient.gone {
+      visibility: hidden;
+    }
+
+    /* ── Enter button ── */
+
+    #enter-btn {
+      position: fixed;
+      bottom: 9vh;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+
+      opacity: 0;
+      animation: btn-appear 2s 1.2s ease-out forwards;
+      transition: opacity 0.4s ease-out;
+    }
+
+    #enter-btn:hover .btn-label {
+      color: rgba(255, 255, 255, 0.65);
+      letter-spacing: 0.55em;
+    }
+
+    #enter-btn:hover .btn-line {
+      width: 36px;
+      opacity: 0.5;
+    }
+
+    .btn-label {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 9px;
+      font-weight: 400;
+      letter-spacing: 0.5em;
+      text-transform: uppercase;
+      transition: color 0.5s ease, letter-spacing 0.5s ease;
+    }
+
+    .btn-line {
+      width: 24px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.6);
+      transition: width 0.5s ease, opacity 0.5s ease;
+      opacity: 0.7;
+    }
+
+    @keyframes btn-appear {
+      from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    #enter-btn.hidden {
+      opacity: 0 !important;
+      pointer-events: none;
+    }
+
+    /* ── Bloom / flash ── */
+
+    #handoff-veil,
+    #bloom,
+    #flash {
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    #handoff-veil {
+      z-index: 9;
+      background:
+        radial-gradient(circle at 50% 48%,
+          rgba(255, 255, 255, 0.5) 0 9%,
+          rgba(160, 220, 255, 0.2) 24%,
+          rgba(255, 255, 255, 0.08) 42%,
+          rgba(0, 0, 0, 0) 68%),
+        linear-gradient(115deg,
+          rgba(0, 0, 0, 0.58) 0%,
+          rgba(0, 0, 0, 0) 42%,
+          rgba(255, 255, 255, 0.12) 100%);
+      mix-blend-mode: screen;
+      transform: translateZ(0) scale(0.9);
+      will-change: opacity, transform;
+    }
+
+    #handoff-veil.active {
+      opacity: 0.82;
+      transform: translateZ(0) scale(1.12);
+      transition: transform 1.1s cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity 0.9s ease-out;
+    }
+
+    #handoff-veil.releasing {
+      opacity: 0;
+      transform: translateZ(0) scale(1.22);
+      transition: transform 1.25s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 1.25s ease-out;
+    }
+
+    #bloom {
+      background:
+        radial-gradient(circle at center,
+          rgba(255, 255, 255, 0.98) 0 12%,
+          rgba(255, 255, 255, 0.78) 22%,
+          rgba(255, 255, 255, 0.3) 40%,
+          rgba(255, 255, 255, 0) 72%);
+      transform: translateZ(0) scale(0.55);
+      will-change: transform, opacity;
+      transition: transform 0.82s cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity 0.32s ease-out;
+    }
+
+    #bloom.active {
+      opacity: 1;
+      transform: translateZ(0) scale(2.05);
+    }
+
+    #bloom.releasing {
+      opacity: 0;
+      transform: translateZ(0) scale(2.35);
+      transition: transform 0.68s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 0.68s ease-out;
+    }
+
+    #flash {
+      background: #fff;
+      will-change: opacity;
+      transition: opacity 0.32s ease-out;
+    }
+
+    #flash.active  { opacity: 1; }
+
+    #flash.releasing {
+      opacity: 0;
+      transition: opacity 0.68s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* ── Scene-next content ── */
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      opacity: 0;
+      transform: translate3d(0, 10px, 0) scale(1.04);
+      will-change: opacity, transform;
+    }
+
+    #scene-next.reveal .content {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+      transition: transform 0.82s cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 0.82s ease-out;
+    }
+
+    h1 {
+      font-size: clamp(32px, 8vw, 80px);
+      font-weight: 200;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    p {
+      font-size: 14px;
+      letter-spacing: 0.15em;
+      color: rgba(240, 235, 227, 0.4);
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Stage 3: destination -->
+  <section class="scene" id="scene-next" aria-hidden="true">
+    <div class="content">
+      <h1>Pagina 2</h1>
+      <p>Funcionou</p>
+    </div>
+  </section>
+
+  <!-- Stage 2: portal entry video (plays once on enter) -->
+  <section class="scene" id="scene-portal" aria-hidden="true">
+    <video
+      id="vid-portal"
+      src="freepik_video-upscale_2843382467 (1).mp4"
+      muted
+      playsinline
+      webkit-playsinline
+      preload="auto"
+    ></video>
+  </section>
+
+  <!-- Stage 1: ambient loop -->
+  <section class="scene" id="scene-ambient">
+    <video
+      id="vid-ambient"
+      src="freepik_video-upscale_2869201089.mp4"
+      autoplay
+      muted
+      loop
+      playsinline
+      webkit-playsinline
+      preload="auto"
+    ></video>
+  </section>
+
+  <!-- Enter button (on top of ambient) -->
+  <button id="enter-btn" aria-label="Entrar no portal">
+    <span class="btn-label">entrar</span>
+    <span class="btn-line"></span>
+  </button>
+
+  <!-- Transition overlays -->
+  <div id="handoff-veil"></div>
+  <div id="bloom"></div>
+  <div id="flash"></div>
+
+  <script>
+    const vidAmbient  = document.getElementById('vid-ambient');
+    const vidPortal   = document.getElementById('vid-portal');
+    const sceneAmbient = document.getElementById('scene-ambient');
+    const scenePortal  = document.getElementById('scene-portal');
+    const sceneNext    = document.getElementById('scene-next');
+    const enterBtn     = document.getElementById('enter-btn');
+    const handoffVeil  = document.getElementById('handoff-veil');
+    const bloom        = document.getElementById('bloom');
+    const flash        = document.getElementById('flash');
+
+    const PLAYBACK_RATE            = 1.5;
+    const PORTAL_PREROLL_MS        = 160;
+    const PORTAL_FRAME_FALLBACK_MS = 320;
+    const HANDOFF_SOFTEN_MS        = 1080;
+    const HANDOFF_RELEASE_MS       = 1250;
+    const AMBIENT_FADE_FALLBACK_MS = 1800;
+    const EXIT_LEAD_MS             = 820;
+    const SHOW_NEXT_MS             = 240;
+    const RELEASE_MS               = 430;
+
+    let portalTriggered = false;
+    let exitTriggered   = false;
+    let triggerTimer = 0, showNextTimer = 0, releaseTimer = 0;
+    let frameFallbackTimer = 0, handoffStartTimer = 0, handoffReleaseTimer = 0;
+    let ambientFallbackTimer = 0, veilCleanupTimer = 0;
+
+    /* ── Enter button click ── */
+    enterBtn.addEventListener('click', () => {
+      if (portalTriggered) return;
+      portalTriggered = true;
+
+      enterBtn.classList.add('hidden');
+      scenePortal.classList.add('preparing');
+      scenePortal.setAttribute('aria-hidden', 'false');
+
+      try {
+        vidPortal.currentTime = 0;
+      } catch (_) {}
+
+      vidPortal.playbackRate = PLAYBACK_RATE;
+      const playPromise = vidPortal.play();
+
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => beginHandoffAfterPortalFrame())
+          .catch(() => startPortalHandoff());
+      } else {
+        beginHandoffAfterPortalFrame();
+      }
+    });
+
+    sceneAmbient.addEventListener('transitionend', (event) => {
+      if (event.target !== sceneAmbient || event.propertyName !== 'opacity') return;
+      window.clearTimeout(ambientFallbackTimer);
+      finishAmbientHandoff();
+    });
+
+    function beginHandoffAfterPortalFrame() {
+      let started = false;
+
+      const queueStart = () => {
+        if (started) return;
+        started = true;
+        window.clearTimeout(frameFallbackTimer);
+        window.clearTimeout(handoffStartTimer);
+        handoffStartTimer = window.setTimeout(startPortalHandoff, PORTAL_PREROLL_MS);
+      };
+
+      window.clearTimeout(frameFallbackTimer);
+      frameFallbackTimer = window.setTimeout(queueStart, PORTAL_FRAME_FALLBACK_MS);
+
+      if (typeof vidPortal.requestVideoFrameCallback === 'function') {
+        vidPortal.requestVideoFrameCallback(queueStart);
+        return;
+      }
+
+      if (vidPortal.readyState >= 2) {
+        queueStart();
+        return;
+      }
+
+      vidPortal.addEventListener('loadeddata', queueStart, { once: true });
+    }
+
+    function startPortalHandoff() {
+      if (scenePortal.classList.contains('active')) return;
+
+      scenePortal.classList.remove('preparing');
+      scenePortal.classList.add('active', 'blending');
+      sceneAmbient.classList.add('leaving');
+
+      handoffVeil.classList.remove('releasing');
+      handoffVeil.classList.add('active');
+
+      window.clearTimeout(ambientFallbackTimer);
+      ambientFallbackTimer = window.setTimeout(finishAmbientHandoff, AMBIENT_FADE_FALLBACK_MS);
+
+      window.clearTimeout(handoffReleaseTimer);
+      handoffReleaseTimer = window.setTimeout(() => {
+        scenePortal.classList.remove('blending');
+        releaseHandoffVeil();
+      }, HANDOFF_SOFTEN_MS);
+
+      scheduleExit();
+    }
+
+    function finishAmbientHandoff() {
+      if (sceneAmbient.classList.contains('gone')) return;
+      sceneAmbient.classList.add('gone');
+      vidAmbient.pause();
+    }
+
+    function releaseHandoffVeil() {
+      handoffVeil.classList.remove('active');
+      handoffVeil.classList.add('releasing');
+
+      window.clearTimeout(veilCleanupTimer);
+      veilCleanupTimer = window.setTimeout(() => {
+        handoffVeil.classList.remove('releasing');
+      }, HANDOFF_RELEASE_MS);
+    }
+
+    /* ── Portal → scene-next transition ── */
+
+    function revealNextScene() {
+      sceneNext.classList.add('active');
+      sceneNext.setAttribute('aria-hidden', 'false');
+    }
+
+    function settlePortal() {
+      vidPortal.pause();
+      scenePortal.classList.remove('blending');
+      scenePortal.style.opacity = '0';
+      bloom.classList.remove('active');
+      flash.classList.remove('active');
+      bloom.classList.add('releasing');
+      flash.classList.add('releasing');
+      requestAnimationFrame(() => {
+        sceneNext.classList.add('reveal');
+      });
+    }
+
+    function startExit() {
+      if (exitTriggered) return;
+      exitTriggered = true;
+
+      vidPortal.classList.add('portal-exit');
+      bloom.classList.add('active');
+      flash.classList.add('active');
+
+      showNextTimer = window.setTimeout(revealNextScene, SHOW_NEXT_MS);
+      releaseTimer  = window.setTimeout(settlePortal, RELEASE_MS);
+    }
+
+    function scheduleExit() {
+      if (exitTriggered || !Number.isFinite(vidPortal.duration) || vidPortal.duration <= 0) return;
+      window.clearTimeout(triggerTimer);
+
+      const leadMediaSec = (EXIT_LEAD_MS / 1000) * vidPortal.playbackRate;
+      const triggerAt    = Math.max(0, vidPortal.duration - leadMediaSec);
+      const wallDelayMs  = Math.max(0, ((triggerAt - vidPortal.currentTime) / vidPortal.playbackRate) * 1000);
+      triggerTimer = window.setTimeout(startExit, wallDelayMs);
+    }
+
+    vidPortal.addEventListener('loadedmetadata', scheduleExit);
+    vidPortal.addEventListener('loadeddata',     scheduleExit);
+    vidPortal.addEventListener('play',           scheduleExit);
+    vidPortal.addEventListener('ratechange',     scheduleExit);
+
+    vidPortal.addEventListener('timeupdate', () => {
+      if (exitTriggered || !Number.isFinite(vidPortal.duration)) return;
+      const leadMediaSec = (EXIT_LEAD_MS / 1000) * vidPortal.playbackRate;
+      if ((vidPortal.duration - vidPortal.currentTime) <= leadMediaSec) startExit();
+    });
+
+    vidPortal.addEventListener('ended', () => {
+      window.clearTimeout(triggerTimer);
+      if (!exitTriggered) startExit();
+    });
+
+    window.addEventListener('pagehide', () => {
+      window.clearTimeout(triggerTimer);
+      window.clearTimeout(showNextTimer);
+      window.clearTimeout(releaseTimer);
+      window.clearTimeout(frameFallbackTimer);
+      window.clearTimeout(handoffStartTimer);
+      window.clearTimeout(handoffReleaseTimer);
+      window.clearTimeout(ambientFallbackTimer);
+      window.clearTimeout(veilCleanupTimer);
+    });
+  </script>
+</body>
+</html>
