@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Portal</title>
+  <link rel="prefetch" href="pagina2.html" as="document" />
+  <link rel="dns-prefetch" href="https://esm.sh" />
+  <link rel="dns-prefetch" href="https://unpkg.com" />
   <style>
     *, *::before, *::after {
       margin: 0;
@@ -466,8 +469,11 @@
     /* ── Portal → scene-next transition ── */
 
     function revealNextScene() {
+      // Show the next scene briefly (acts as a white/dark backdrop) and then
+      // hand off to the actual landing page while the flash is still white.
       sceneNext.classList.add('active');
       sceneNext.setAttribute('aria-hidden', 'false');
+      window.location.href = 'pagina2.html';
     }
 
     function settlePortal() {

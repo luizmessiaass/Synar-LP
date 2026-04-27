@@ -1,1 +1,16 @@
-desktop.ini
+# Local experiments / unrelated projects
+next-app/
+next-app2/
+synar-lp/
+assets/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
