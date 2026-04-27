@@ -469,10 +469,9 @@
     /* ── Portal → scene-next transition ── */
 
     function revealNextScene() {
-      // Show the next scene briefly (acts as a white/dark backdrop) and then
-      // hand off to the actual landing page while the flash is still white.
-      sceneNext.classList.add('active');
-      sceneNext.setAttribute('aria-hidden', 'false');
+      // Hand off straight to the landing page while the flash is at peak white,
+      // without revealing the placeholder scene-next (which would briefly show
+      // "Pagina 2 / Funcionou" if pagina2.html is still loading).
       window.location.href = 'pagina2.html';
     }
 
